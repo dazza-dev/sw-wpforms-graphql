@@ -1,0 +1,249 @@
+<?php
+
+/**
+ * Plugin Name: SW - WPForms GraphQL
+ * Plugin URI: https://www.seniors.com.co
+ * Description: Exposes WPForms form structure via WPGraphQL and provides a REST endpoint for form submissions.
+ * Version: 1.0.0
+ * Author: Seniors
+ * Author URI: https://www.seniors.com.co
+ * License: GPL v2 or later
+ * License URI: https://www.gnu.org/licenses/gpl-2.0.html
+ * Text Domain: sw-wpforms-graphql
+ * Requires PHP: 7.4
+ * Requires at least: 5.8
+ */
+
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+/**
+ * Register WPForms GraphQL types and fields.
+ */
+function sw_wpforms_register_graphql_fields(): void
+{
+    if (!class_exists('WPGraphQL') || !function_exists('wpforms')) {
+        return;
+    }
+
+    // Field choice (for select, radio, checkbox fields)
+    register_graphql_object_type('SwWpFormFieldChoice', [
+        'description' => 'A choice option for select/radio/checkbox fields',
+        'fields' => [
+            'label' => ['type' => 'String'],
+            'value' => ['type' => 'String'],
+        ],
+    ]);
+
+    // Form field
+    register_graphql_object_type('SwWpFormField', [
+        'description' => 'A single form field',
+        'fields' => [
+            'id'          => ['type' => ['non_null' => 'Int'], 'description' => 'Field ID'],
+            'type'        => ['type' => ['non_null' => 'String'], 'description' => 'Field type (text, email, textarea, select, etc.)'],
+            'label'       => ['type' => 'String', 'description' => 'Field label'],
+            'placeholder' => ['type' => 'String', 'description' => 'Field placeholder text'],
+            'required'    => ['type' => 'Boolean', 'description' => 'Whether the field is required'],
+            'cssClass'    => ['type' => 'String', 'description' => 'Custom CSS class'],
+            'size'        => ['type' => 'String', 'description' => 'Field size (small, medium, large)'],
+            'choices'     => ['type' => ['list_of' => 'SwWpFormFieldChoice'], 'description' => 'Choices for select/radio/checkbox'],
+            'sublabels'   => ['type' => 'String', 'description' => 'Sublabels JSON for compound fields (name, address)'],
+            'format'      => ['type' => 'String', 'description' => 'Field format (e.g. first-last for name fields)'],
+        ],
+    ]);
+
+    // Form
+    register_graphql_object_type('SwWpForm', [
+        'description' => 'A WPForms form',
+        'fields' => [
+            'id'         => ['type' => ['non_null' => 'Int'], 'description' => 'Form ID'],
+            'title'      => ['type' => 'String', 'description' => 'Form title'],
+            'submitText' => ['type' => 'String', 'description' => 'Submit button text'],
+            'fields'     => ['type' => ['list_of' => 'SwWpFormField'], 'description' => 'Form fields'],
+        ],
+    ]);
+
+    // Root query field
+    register_graphql_field('RootQuery', 'wpForm', [
+        'type'        => 'SwWpForm',
+        'description' => 'Get a WPForms form structure by ID',
+        'args'        => [
+            'id' => [
+                'type'        => ['non_null' => 'Int'],
+                'description' => 'WPForms form ID',
+            ],
+        ],
+        'resolve' => function ($_root, $args) {
+            $form_id = absint($args['id']);
+            $form = wpforms()->form->get($form_id);
+
+            if (!$form) {
+                return null;
+            }
+
+            $form_data = wpforms_decode($form->post_content);
+
+            $submit_text = $form_data['settings']['submit_text'] ?? null;
+
+            if (empty($form_data['fields'])) {
+                return [
+                    'id'         => $form_id,
+                    'title'      => $form->post_title,
+                    'submitText' => $submit_text,
+                    'fields'     => [],
+                ];
+            }
+
+            $fields = [];
+            foreach ($form_data['fields'] as $field) {
+                $choices = null;
+                if (!empty($field['choices'])) {
+                    $choices = [];
+                    foreach ($field['choices'] as $choice) {
+                        $choices[] = [
+                            'label' => $choice['label'] ?? '',
+                            'value' => $choice['value'] ?? $choice['label'] ?? '',
+                        ];
+                    }
+                }
+
+                $fields[] = [
+                    'id'          => (int) $field['id'],
+                    'type'        => $field['type'] ?? 'text',
+                    'label'       => $field['label'] ?? '',
+                    'placeholder' => $field['placeholder'] ?? null,
+                    'required'    => !empty($field['required']),
+                    'cssClass'    => $field['css'] ?? null,
+                    'size'        => $field['size'] ?? null,
+                    'choices'     => $choices,
+                    'sublabels'   => !empty($field['sublabels']) ? wp_json_encode($field['sublabels']) : null,
+                    'format'      => $field['format'] ?? null,
+                ];
+            }
+
+            return [
+                'id'         => $form_id,
+                'title'      => $form->post_title,
+                'submitText' => $submit_text,
+                'fields'     => $fields,
+            ];
+        },
+    ]);
+}
+add_action('graphql_register_types', 'sw_wpforms_register_graphql_fields');
+
+/**
+ * REST API endpoint for form submissions.
+ *
+ * POST /wp-json/sw/v1/forms/{form_id}/submit
+ * Body: { "fields": { "1": "value1", "2": "value2" } }
+ */
+function sw_wpforms_register_rest_routes(): void
+{
+    if (!function_exists('wpforms')) {
+        return;
+    }
+
+    register_rest_route('sw/v1', '/forms/(?P<form_id>\d+)/submit', [
+        'methods'  => 'POST',
+        'callback' => 'sw_wpforms_handle_submission',
+        'permission_callback' => '__return_true',
+        'args' => [
+            'form_id' => [
+                'required'          => true,
+                'validate_callback' => function ($value) {
+                    return is_numeric($value) && $value > 0;
+                },
+                'sanitize_callback' => 'absint',
+            ],
+        ],
+    ]);
+}
+add_action('rest_api_init', 'sw_wpforms_register_rest_routes');
+
+function sw_wpforms_handle_submission(\WP_REST_Request $request): \WP_REST_Response
+{
+    $form_id = $request->get_param('form_id');
+    $submitted_fields = $request->get_param('fields');
+
+    if (empty($submitted_fields) || !is_array($submitted_fields)) {
+        return new \WP_REST_Response([
+            'success' => false,
+            'message' => 'No fields provided.',
+        ], 400);
+    }
+
+    // Verify form exists
+    $form = wpforms()->form->get($form_id);
+    if (!$form) {
+        return new \WP_REST_Response([
+            'success' => false,
+            'message' => 'Form not found.',
+        ], 404);
+    }
+
+    $form_data = wpforms_decode($form->post_content);
+
+    if (empty($form_data['fields'])) {
+        return new \WP_REST_Response([
+            'success' => false,
+            'message' => 'Form has no fields.',
+        ], 400);
+    }
+
+    // Build entry fields array matching WPForms expected format
+    $entry_fields = [];
+    foreach ($form_data['fields'] as $field_config) {
+        $field_id = $field_config['id'];
+        $value = $submitted_fields[$field_id] ?? '';
+
+        // Validate required fields
+        if (!empty($field_config['required']) && empty($value)) {
+            return new \WP_REST_Response([
+                'success' => false,
+                'message' => sprintf('Field "%s" is required.', $field_config['label'] ?? $field_id),
+            ], 422);
+        }
+
+        // Validate email fields
+        if ($field_config['type'] === 'email' && !empty($value) && !is_email($value)) {
+            return new \WP_REST_Response([
+                'success' => false,
+                'message' => sprintf('Field "%s" must be a valid email.', $field_config['label'] ?? $field_id),
+            ], 422);
+        }
+
+        $entry_fields[$field_id] = [
+            'id'    => $field_id,
+            'type'  => $field_config['type'] ?? 'text',
+            'name'  => $field_config['label'] ?? '',
+            'value' => is_array($value) ? implode(', ', array_map('sanitize_text_field', $value)) : sanitize_text_field($value),
+        ];
+    }
+
+    // Create the entry
+    $entry_data = [
+        'form_id' => $form_id,
+        'fields'  => $entry_fields,
+    ];
+
+    $entry_id = wpforms()->entry->add($entry_data);
+
+    if (!$entry_id) {
+        return new \WP_REST_Response([
+            'success' => false,
+            'message' => 'Failed to save entry.',
+        ], 500);
+    }
+
+    // Trigger WPForms notifications (emails)
+    $notifications = new \WPForms_Entry_Handler();
+    do_action('wpforms_process_complete', $entry_fields, $entry_data, $form_data, $entry_id);
+
+    return new \WP_REST_Response([
+        'success'  => true,
+        'message'  => 'Form submitted successfully.',
+        'entry_id' => $entry_id,
+    ], 200);
+}
