@@ -57,10 +57,11 @@ function sw_wpforms_register_graphql_fields(): void
     register_graphql_object_type('SwWpForm', [
         'description' => 'A WPForms form',
         'fields' => [
-            'id'         => ['type' => ['non_null' => 'Int'], 'description' => 'Form ID'],
-            'title'      => ['type' => 'String', 'description' => 'Form title'],
-            'submitText' => ['type' => 'String', 'description' => 'Submit button text'],
-            'fields'     => ['type' => ['list_of' => 'SwWpFormField'], 'description' => 'Form fields'],
+            'id'                   => ['type' => ['non_null' => 'Int'], 'description' => 'Form ID'],
+            'title'                => ['type' => 'String', 'description' => 'Form title'],
+            'submitText'           => ['type' => 'String', 'description' => 'Submit button text'],
+            'submitProcessingText' => ['type' => 'String', 'description' => 'Submit button processing text'],
+            'fields'               => ['type' => ['list_of' => 'SwWpFormField'], 'description' => 'Form fields'],
         ],
     ]);
 
@@ -85,13 +86,15 @@ function sw_wpforms_register_graphql_fields(): void
             $form_data = wpforms_decode($form->post_content);
 
             $submit_text = $form_data['settings']['submit_text'] ?? null;
+            $submit_processing_text = $form_data['settings']['submit_text_processing'] ?? null;
 
             if (empty($form_data['fields'])) {
                 return [
-                    'id'         => $form_id,
-                    'title'      => $form->post_title,
-                    'submitText' => $submit_text,
-                    'fields'     => [],
+                    'id'                   => $form_id,
+                    'title'                => $form->post_title,
+                    'submitText'           => $submit_text,
+                    'submitProcessingText' => $submit_processing_text,
+                    'fields'               => [],
                 ];
             }
 
@@ -123,10 +126,11 @@ function sw_wpforms_register_graphql_fields(): void
             }
 
             return [
-                'id'         => $form_id,
-                'title'      => $form->post_title,
-                'submitText' => $submit_text,
-                'fields'     => $fields,
+                'id'                   => $form_id,
+                'title'                => $form->post_title,
+                'submitText'           => $submit_text,
+                'submitProcessingText' => $submit_processing_text,
+                'fields'               => $fields,
             ];
         },
     ]);
