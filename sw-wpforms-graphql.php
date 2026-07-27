@@ -106,9 +106,13 @@ function sw_wpforms_register_graphql_fields(): void
                 if (!empty($field['choices'])) {
                     $choices = [];
                     foreach ($field['choices'] as $choice) {
+                        // WPForms stores an empty string value when "Show Values"
+                        // is off, so fall back to the label (?? only catches null).
+                        $label = $choice['label'] ?? '';
+                        $value = $choice['value'] ?? '';
                         $choices[] = [
-                            'label' => $choice['label'] ?? '',
-                            'value' => $choice['value'] ?? $choice['label'] ?? '',
+                            'label' => $label,
+                            'value' => $value !== '' ? $value : $label,
                         ];
                     }
                 }
