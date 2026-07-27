@@ -43,6 +43,7 @@ function sw_wpforms_register_graphql_fields(): void
             'id'          => ['type' => ['non_null' => 'Int'], 'description' => 'Field ID'],
             'type'        => ['type' => ['non_null' => 'String'], 'description' => 'Field type (text, email, textarea, select, etc.)'],
             'label'       => ['type' => 'String', 'description' => 'Field label'],
+            'description' => ['type' => 'String', 'description' => 'Field help/description text'],
             'placeholder' => ['type' => 'String', 'description' => 'Field placeholder text'],
             'required'    => ['type' => 'Boolean', 'description' => 'Whether the field is required'],
             'cssClass'    => ['type' => 'String', 'description' => 'Custom CSS class'],
@@ -50,6 +51,7 @@ function sw_wpforms_register_graphql_fields(): void
             'choices'     => ['type' => ['list_of' => 'SwWpFormFieldChoice'], 'description' => 'Choices for select/radio/checkbox'],
             'sublabels'   => ['type' => 'String', 'description' => 'Sublabels JSON for compound fields (name, address)'],
             'format'      => ['type' => 'String', 'description' => 'Field format (e.g. first-last for name fields)'],
+            'config'      => ['type' => 'String', 'description' => 'Full raw field config as JSON (for compound/advanced fields)'],
         ],
     ]);
 
@@ -115,6 +117,7 @@ function sw_wpforms_register_graphql_fields(): void
                     'id'          => (int) $field['id'],
                     'type'        => $field['type'] ?? 'text',
                     'label'       => $field['label'] ?? '',
+                    'description' => $field['description'] ?? null,
                     'placeholder' => $field['placeholder'] ?? null,
                     'required'    => !empty($field['required']),
                     'cssClass'    => $field['css'] ?? null,
@@ -122,6 +125,7 @@ function sw_wpforms_register_graphql_fields(): void
                     'choices'     => $choices,
                     'sublabels'   => !empty($field['sublabels']) ? wp_json_encode($field['sublabels']) : null,
                     'format'      => $field['format'] ?? null,
+                    'config'      => wp_json_encode($field),
                 ];
             }
 
