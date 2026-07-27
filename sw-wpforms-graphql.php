@@ -273,13 +273,18 @@ function sw_wpforms_handle_submission(\WP_REST_Request $request): \WP_REST_Respo
         ];
     }
 
-    // Create the entry
+    // Create the entry. WPForms stores the `fields` column as a JSON string,
+    // so it must be encoded (passing the raw array saves an empty entry).
+    $entry_id = wpforms()->entry->add([
+        'form_id' => $form_id,
+        'fields'  => wp_json_encode($entry_fields),
+    ]);
+
+    // Data passed to the notification hook keeps the array form.
     $entry_data = [
         'form_id' => $form_id,
         'fields'  => $entry_fields,
     ];
-
-    $entry_id = wpforms()->entry->add($entry_data);
 
     if (!$entry_id) {
         return new \WP_REST_Response([
