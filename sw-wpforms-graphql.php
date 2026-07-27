@@ -27,7 +27,6 @@ function sw_wpforms_register_graphql_fields(): void
         return;
     }
 
-    // Field choice (for select, radio, checkbox fields)
     register_graphql_object_type('SwWpFormFieldChoice', [
         'description' => 'A choice option for select/radio/checkbox fields',
         'fields' => [
@@ -36,7 +35,6 @@ function sw_wpforms_register_graphql_fields(): void
         ],
     ]);
 
-    // Form field
     register_graphql_object_type('SwWpFormField', [
         'description' => 'A single form field',
         'fields' => [
@@ -55,7 +53,6 @@ function sw_wpforms_register_graphql_fields(): void
         ],
     ]);
 
-    // Form
     register_graphql_object_type('SwWpForm', [
         'description' => 'A WPForms form',
         'fields' => [
@@ -67,7 +64,6 @@ function sw_wpforms_register_graphql_fields(): void
         ],
     ]);
 
-    // Root query field
     register_graphql_field('RootQuery', 'wpForm', [
         'type'        => 'SwWpForm',
         'description' => 'Get a WPForms form structure by ID',
@@ -223,7 +219,6 @@ function sw_wpforms_handle_submission(\WP_REST_Request $request): \WP_REST_Respo
         ], 400);
     }
 
-    // Verify form exists
     $form = wpforms()->form->get($form_id);
     if (!$form) {
         return new \WP_REST_Response([
@@ -241,13 +236,11 @@ function sw_wpforms_handle_submission(\WP_REST_Request $request): \WP_REST_Respo
         ], 400);
     }
 
-    // Build entry fields array matching WPForms expected format
     $entry_fields = [];
     foreach ($form_data['fields'] as $field_config) {
         $field_id = $field_config['id'];
         $value = $submitted_fields[$field_id] ?? '';
 
-        // Validate required fields
         if (!empty($field_config['required']) && empty($value)) {
             return new \WP_REST_Response([
                 'success' => false,
@@ -255,7 +248,6 @@ function sw_wpforms_handle_submission(\WP_REST_Request $request): \WP_REST_Respo
             ], 422);
         }
 
-        // Validate email fields
         if ($field_config['type'] === 'email' && !empty($value) && !is_email($value)) {
             return new \WP_REST_Response([
                 'success' => false,
